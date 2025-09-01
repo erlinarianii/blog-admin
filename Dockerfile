@@ -60,7 +60,7 @@ RUN sed -i "s/Listen 80/Listen ${PORT}/g" /etc/apache2/ports.conf \
 EXPOSE ${PORT}
 
 # Copy dan set permissions untuk script
-COPY wait-for-db.sh /usr/local/bin/wait-for-db.sh
+# COPY wait-for-db.sh /usr/local/bin/wait-for-db.sh
 RUN chmod +x /usr/local/bin/wait-for-db.sh
 
 # Entry point
