@@ -19,7 +19,7 @@ class Post extends Model
         'is_published',
         'published_at',
         'user_id',
-        'category_id', // tambahkan supaya mass assignment bisa jalan
+        'category_id',
     ];
 
     protected $casts = [

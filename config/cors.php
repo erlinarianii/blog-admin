@@ -18,10 +18,9 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
-    'http://localhost:3000',
-    'https://my-portfolio.vercel.app',
-],
-
+        'http://localhost:3000',
+        'https://my-portfolio.vercel.app',
+    ],
 
     'allowed_origins_patterns' => [],
 
@@ -31,6 +30,6 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false,
+    'supports_credentials' => true,
 
 ];
