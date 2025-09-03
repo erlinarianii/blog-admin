@@ -10,6 +10,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage; // ⬅️ untuk url() jika dibutuhkan di table
 
 class PostResource extends Resource
 {
@@ -20,36 +21,58 @@ class PostResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Main')->schema([
-                Forms\Components\TextInput::make('title')
-                    ->required()
-                    ->live(onBlur: true)
-                    ->afterStateUpdated(function ($state, callable $set) {
-                        $set('slug', Str::slug($state));
-                    }),
-                Forms\Components\TextInput::make('slug')
-                    ->unique(ignoreRecord: true)
-                    ->required(),
-                Forms\Components\Textarea::make('excerpt')
-                    ->rows(3),
-                Forms\Components\RichEditor::make('body')
-                    ->columnSpanFull()
-                    ->required(),
-                Forms\Components\Select::make('category_id')
-                    ->label('Category')
-                    ->relationship('category', 'name')
-                    ->searchable()
-                    ->required(),
-            ])->columns(2),
+            Forms\Components\Section::make('Main')
+                ->schema([
+                    Forms\Components\TextInput::make('title')
+                        ->required()
+                        ->live(onBlur: true)
+                        ->afterStateUpdated(function ($state, callable $set) {
+                            $set('slug', Str::slug((string) $state));
+                        }),
 
-            Forms\Components\Section::make('Publish')->schema([
-                Forms\Components\Toggle::make('is_published')->label('Published'),
-                Forms\Components\DateTimePicker::make('published_at'),
-                Forms\Components\FileUpload::make('cover_image')
-                    ->image()
-                    ->directory('covers')
-                    ->visibility('public'),
-            ])->columns(2),
+                    Forms\Components\TextInput::make('slug')
+                        ->required()
+                        ->unique(ignoreRecord: true),
+
+                    Forms\Components\Textarea::make('excerpt')
+                        ->rows(3)
+                        ->maxLength(500),
+
+                    Forms\Components\RichEditor::make('body')
+                        ->columnSpanFull()
+                        ->required(),
+
+                    Forms\Components\Select::make('category_id')
+                        ->label('Category')
+                        ->relationship('category', 'name')
+                        ->searchable()
+                        ->required(),
+                ])
+                ->columns(2),
+
+            Forms\Components\Section::make('Publish')
+                ->schema([
+                    Forms\Components\Toggle::make('is_published')
+                        ->label('Published')
+                        ->inline(false),
+
+                    Forms\Components\DateTimePicker::make('published_at')
+                        ->seconds(false)
+                        ->native(false),
+
+                    Forms\Components\FileUpload::make('cover')
+                        ->label('Cover Image')
+                        ->image()
+                        ->directory('covers')     // disimpan ke storage/app/public/covers
+                        ->disk('public')          // disk public
+                        ->visibility('public')    // pastikan public
+                        ->preserveFilenames()
+                        ->imageEditor()           // editor sederhana (crop/rotate)
+                        ->maxSize(5 * 1024)       // 5MB
+                        ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                        ->helperText('PNG/JPG/WEBP, max 5MB'),
+                ])
+                ->columns(2),
         ]);
     }
 
@@ -57,16 +80,36 @@ class PostResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\ImageColumn::make('cover_image')->square(),
-                Tables\Columns\TextColumn::make('title')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('slug')->toggleable(isToggledHiddenByDefault: true),
+                // Thumbnail cover
+                Tables\Columns\ImageColumn::make('cover')
+                    ->disk('public')
+                    ->label('Cover')
+                    ->square()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('title')
+                    ->searchable()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('slug')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('category.name')
                     ->label('Category')
                     ->badge()
                     ->sortable(),
-                Tables\Columns\IconColumn::make('is_published')->boolean(),
-                Tables\Columns\TextColumn::make('published_at')->dateTime()->sortable(),
-                Tables\Columns\TextColumn::make('updated_at')->since()->label('Updated'),
+
+                Tables\Columns\IconColumn::make('is_published')
+                    ->label('Published')
+                    ->boolean(),
+
+                Tables\Columns\TextColumn::make('published_at')
+                    ->dateTime('Y-m-d H:i')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->since()
+                    ->label('Updated'),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_published')->label('Published'),
@@ -85,9 +128,9 @@ class PostResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListPosts::route('/'),
+            'index'  => Pages\ListPosts::route('/'),
             'create' => Pages\CreatePost::route('/create'),
-            'edit' => Pages\EditPost::route('/{record}/edit'),
+            'edit'   => Pages\EditPost::route('/{record}/edit'),
         ];
     }
 }

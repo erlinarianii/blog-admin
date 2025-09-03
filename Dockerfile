@@ -1,5 +1,5 @@
 # Base PHP dengan Apache
-FROM php:8.2-apache
+FROM php:8.3-apache
 
 WORKDIR /var/www/html
 

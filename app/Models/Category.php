@@ -14,7 +14,10 @@ class Category extends Model
         'name',
         'slug',
     ];
-
+public function posts()
+    {
+        return $this->hasMany(Post::class);
+    }
     protected static function boot()
     {
         parent::boot();
@@ -24,10 +27,5 @@ class Category extends Model
                 $category->slug = Str::slug($category->name);
             }
         });
-    }
-
-    public function posts()
-    {
-        return $this->hasMany(Post::class);
     }
 }
