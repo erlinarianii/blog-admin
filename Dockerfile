@@ -1,67 +1,69 @@
-# Base PHP dengan Apache
+# Base PHP + Apache (PHP 8.3 sesuai requirement Filament/OpenSpout)
 FROM php:8.3-apache
 
 WORKDIR /var/www/html
 
-# Install dependencies
+# Sistem dependency + Node 20 (untuk Vite)
 RUN apt-get update && apt-get install -y \
     git curl unzip pkg-config libicu-dev libzip-dev zlib1g-dev \
     libpng-dev libjpeg-dev libwebp-dev libfreetype6-dev libonig-dev \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+  && apt-get install -y nodejs \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache modules
+# Apache modules
 RUN a2enmod rewrite headers
 
-# Install PHP extensions
+# PHP extensions
+# (Jika perlu GD opsi lengkap: docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp)
 RUN docker-php-ext-install intl zip pdo_mysql bcmath pcntl gd mbstring opcache
 
-# Install Composer
+# Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy project files
+# Copy source code
 COPY . .
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader
+# Composer install (tanpa dev) – non-interaktif & optimize
+RUN composer install --no-dev --prefer-dist --no-progress --no-interaction --optimize-autoloader
 
-# Install Node dependencies dan build assets
-RUN npm install && npm run build
+# Build assets (pakai npm ci agar repeatable kalau ada package-lock.json)
+# fallback ke npm install bila tidak ada lockfile
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi \
+  && npm run build
 
-# Publish Filament assets
-RUN php artisan filament:assets --force || echo "DEBUG: filament assets gagal"
+# (Opsional) Publish Filament assets – tidak fatal bila gagal
+RUN php artisan filament:assets --force || echo "DEBUG: filament assets failed (ignore)"
 
-# Setelah composer install dan artisan migrate
+# (Opsional) Storage link – tidak fatal bila gagal saat build
 RUN php artisan storage:link || true
 
-# Set permissions
+# Permissions
 RUN chown -R www-data:www-data /var/www/html && \
     chmod -R 755 storage bootstrap/cache
 
 # ---------------------------
-# Apache config untuk Laravel
+# Apache vhost untuk Laravel
 # ---------------------------
-RUN echo '<VirtualHost *:${PORT}>\n\
-    DocumentRoot /var/www/html/public\n\
-    <Directory /var/www/html/public>\n\
-        AllowOverride All\n\
-        Require all granted\n\
-    </Directory>\n\
-    Header always set X-Forwarded-Proto "https"\n\
-    Header always set X-Forwarded-Port "443"\n\
-</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
+# Tulis vhost default pada port 80 dahulu, lalu ganti ke ${PORT} via sed
+RUN printf '%s\n' \
+  '<VirtualHost *:80>' \
+  '    DocumentRoot /var/www/html/public' \
+  '    <Directory /var/www/html/public>' \
+  '        AllowOverride All' \
+  '        Require all granted' \
+  '    </Directory>' \
+  '    Header always set X-Forwarded-Proto "https"' \
+  '    Header always set X-Forwarded-Port "443"' \
+  '</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
-# Gunakan PORT dari Railway
+# Railway memberikan PORT via env, ganti listen dan vhost ke nilai PORT
 ENV PORT=8080
-RUN sed -i "s/Listen 80/Listen ${PORT}/g" /etc/apache2/ports.conf \
-    && sed -i "s/:80/:${PORT}/g" /etc/apache2/sites-available/000-default.conf
+RUN sed -i "s/Listen 80/Listen ${PORT}/" /etc/apache2/ports.conf && \
+    sed -i "s/:80/:${PORT}/" /etc/apache2/sites-available/000-default.conf
 
-EXPOSE ${PORT}
+# EXPOSE harus angka literal (bukan env var)
+EXPOSE 8080
 
-# Copy dan set permissions untuk script
-# COPY wait-for-db.sh /usr/local/bin/wait-for-db.sh
-RUN chmod +x /usr/local/bin/wait-for-db.sh
-
-# Entry point
-CMD ["/usr/local/bin/wait-for-db.sh"]
+# Entry point Apache – tidak pakai wait-for-db lagi
+CMD ["apache2-foreground"]
